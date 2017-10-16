@@ -1486,6 +1486,7 @@ clean: $(clean-dirs)
 		-o -name '*.symtypes' -o -name 'modules.order' \
 		-o -name modules.builtin -o -name '.tmp_*.o.*' \
 		-o -name '*.ll' \
+		-o -name .cache.mk \
 		-o -name '*.gcno' \) -type f -print | xargs rm -f
 
 # Generate tags for editors
