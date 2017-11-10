@@ -1777,12 +1777,14 @@ static void synaptics_rmi4_f1a_report(struct synaptics_rmi4_data *rmi4_data,
 	unsigned short data_addr = fhandler->full_addr.data_base;
 	struct synaptics_rmi4_f1a_handle *f1a = fhandler->data;
 	static unsigned char do_once = 1;
+	static bool current_status[MAX_NUMBER_OF_BUTTONS];
 #ifdef NO_0D_WHILE_2D
 	static bool before_2d_status[MAX_NUMBER_OF_BUTTONS];
 	static bool while_2d_status[MAX_NUMBER_OF_BUTTONS];
 #endif
 
 	if (do_once) {
+		memset(current_status, 0, sizeof(current_status));
 #ifdef NO_0D_WHILE_2D
 		memset(before_2d_status, 0, sizeof(before_2d_status));
 		memset(while_2d_status, 0, sizeof(while_2d_status));
@@ -1813,6 +1815,12 @@ static void synaptics_rmi4_f1a_report(struct synaptics_rmi4_data *rmi4_data,
 		index = button / 8;
 		shift = button % 8;
 		status = ((data[index] >> shift) & MASK_1BIT);
+
+		if (current_status[button] == status) {
+			if (!rmi4_data->suspend)
+				continue;
+		} else
+			current_status[button] = status;
 
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: Button %d (code %d) ->%d\n",
@@ -5342,7 +5350,7 @@ static void synaptics_rmi4_f11_wg(struct synaptics_rmi4_data *rmi4_data,
 static void mdss_regulator_ctrl(struct synaptics_rmi4_data *rmi4_data, unsigned int flag, bool enable)
 {
 	int retval = 0;
-	static unsigned int status;
+	static unsigned int status = 0;
 
 	if (rmi4_data == NULL)
 		return;
@@ -5436,6 +5444,75 @@ static void mdss_reset_ctrl(const struct synaptics_dsx_board_data *bdata, bool o
 			gpio_set_value(bdata->mdss_reset, !bdata->mdss_reset_state);
 	}
 }
+
+#if 0
+static void mdss_panel_poweron(struct synaptics_rmi4_data *rmi4_data, bool enable)
+{
+	if (!rmi4_data->hw_if->board_data->panel_is_incell)
+		return;
+
+	if (enable) {
+#if 0
+		/*disp regulator always on, so do not control this regulator*/
+		if (rmi4_data->panel_power_seq.disp_pre_on_sleep)
+			msleep(rmi4_data->panel_power_seq.disp_pre_on_sleep);
+		mdss_regulator_ctrl(rmi4_data, DISP_REG_VDD, true);
+		if (rmi4_data->panel_power_seq.disp_post_on_sleep)
+			msleep(rmi4_data->panel_power_seq.disp_post_on_sleep);
+#endif
+		if (rmi4_data->panel_power_seq.lab_pre_on_sleep)
+			msleep(rmi4_data->panel_power_seq.lab_pre_on_sleep);
+		mdss_regulator_ctrl(rmi4_data, DISP_REG_LAB, true);
+		if (rmi4_data->panel_power_seq.lab_post_on_sleep)
+			msleep(rmi4_data->panel_power_seq.lab_post_on_sleep);
+
+		if (rmi4_data->panel_power_seq.ibb_pre_on_sleep)
+			msleep(rmi4_data->panel_power_seq.ibb_pre_on_sleep);
+		mdss_regulator_ctrl(rmi4_data, DISP_REG_IBB, true);
+		if (rmi4_data->panel_power_seq.ibb_post_on_sleep)
+			msleep(rmi4_data->panel_power_seq.ibb_post_on_sleep);
+	} else {
+		if (rmi4_data->panel_power_seq.ibb_pre_off_sleep)
+			msleep(rmi4_data->panel_power_seq.ibb_pre_off_sleep);
+		mdss_regulator_ctrl(rmi4_data, DISP_REG_IBB, false);
+		if (rmi4_data->panel_power_seq.ibb_post_off_sleep)
+			msleep(rmi4_data->panel_power_seq.ibb_post_off_sleep);
+
+		if (rmi4_data->panel_power_seq.lab_pre_off_sleep)
+			msleep(rmi4_data->panel_power_seq.lab_pre_off_sleep);
+		mdss_regulator_ctrl(rmi4_data, DISP_REG_LAB, false);
+		if (rmi4_data->panel_power_seq.lab_post_off_sleep)
+			msleep(rmi4_data->panel_power_seq.lab_post_off_sleep);
+#if 0
+		/*disp regulator always on, so do not control this regulator*/
+		if (rmi4_data->panel_power_seq.disp_pre_off_sleep)
+			msleep(rmi4_data->panel_power_seq.disp_pre_off_sleep);
+		mdss_regulator_ctrl(rmi4_data, DISP_REG_VDD, false);
+		if (rmi4_data->panel_power_seq.disp_post_off_sleep)
+			msleep(rmi4_data->panel_power_seq.disp_post_off_sleep);
+#endif
+	}
+	pr_debug("power %s seq:\n", enable ? "on" : "off");
+#if 0
+	/*disp regulator always on, so do not control this regulator*/
+	pr_debug("IOVDD: preonsleep=%d,postonsleep=%d,preoffsleep=%d,postoffsleep=%d\n",
+			rmi4_data->panel_power_seq.disp_pre_on_sleep,
+			rmi4_data->panel_power_seq.disp_post_on_sleep,
+			rmi4_data->panel_power_seq.disp_pre_off_sleep,
+			rmi4_data->panel_power_seq.disp_post_off_sleep);
+#endif
+	pr_debug("LAB: preonsleep=%d,postonsleep=%d,preoffsleep=%d,postoffsleep=%d\n",
+			rmi4_data->panel_power_seq.lab_pre_on_sleep,
+			rmi4_data->panel_power_seq.lab_post_on_sleep,
+			rmi4_data->panel_power_seq.lab_pre_off_sleep,
+			rmi4_data->panel_power_seq.lab_post_off_sleep);
+	pr_debug("IBB: preonsleep=%d,postonsleep=%d,preoffsleep=%d,postoffsleep=%d\n",
+			rmi4_data->panel_power_seq.ibb_pre_on_sleep,
+			rmi4_data->panel_power_seq.ibb_post_on_sleep,
+			rmi4_data->panel_power_seq.ibb_pre_off_sleep,
+			rmi4_data->panel_power_seq.ibb_post_off_sleep);
+}
+#endif
 
 static void mdss_reset_action(const struct synaptics_dsx_board_data *bdata)
 {
@@ -5767,7 +5844,9 @@ static int synaptics_rmi4_suspend(struct device *dev)
 		if (!rmi4_data->wakeup_en)
 			synaptics_rmi4_sleep_enable(rmi4_data, true);
 		else {
-			if (rmi4_data->chip_is_tddi)
+			if (!rmi4_data->chip_is_tddi)
+				msleep(300);
+			else
 				msleep(120);
 			synaptics_rmi4_wakeup_gesture(rmi4_data, true);
 			synaptics_rmi4_irq_enable(rmi4_data, true, false);
@@ -5802,7 +5881,7 @@ static int synaptics_rmi4_resume(struct device *dev)
 		rmi4_data->hw_if->board_data;
 
 #ifdef CONFIG_FB
-	static int skip;
+	static int skip = 0;
 
 	if (skip == 0) {
 		skip = 1;

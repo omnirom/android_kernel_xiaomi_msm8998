@@ -3564,7 +3564,6 @@ static int tddi_ratio_calculation(signed short *p_image)
 		goto exit;
 	}
 
-
 	p_right_median = (signed short *) kzalloc(rx_num * sizeof(short), GFP_KERNEL);
 	if (!p_right_median) {
 		dev_err(rmi4_data->pdev->dev.parent, "%s: Failed to alloc mem for p_right_median\n", __func__);
@@ -3602,7 +3601,6 @@ static int tddi_ratio_calculation(signed short *p_image)
 				p_left_column_buf[i * left_size + j] = p_data_16[j * rx_num + i];
 			}
 		}
-
 		p_data_16 = p_image + left_size * rx_num;
 		for (i = 0; i < rx_num; i++) {
 			for (j = 0; j < right_size; j++) {
@@ -3610,14 +3608,12 @@ static int tddi_ratio_calculation(signed short *p_image)
 			}
 		}
 	} else {
-
 		p_data_16 = p_image;
 		for (i = 0; i < rx_num; i++) {
 			for (j = 0; j < right_size; j++) {
 				p_right_column_buf[i * right_size + j] = p_data_16[j * rx_num + i];
 			}
 		}
-
 		p_data_16 = p_image + right_size * rx_num;
 		for (i = 0; i < rx_num; i++) {
 			for (j = 0; j < left_size; j++) {
@@ -3626,19 +3622,14 @@ static int tddi_ratio_calculation(signed short *p_image)
 		}
 	}
 
-
 	for (i = 0; i < rx_num; i++) {
 		p_left_median[i] = FindMedian(p_left_column_buf + i * left_size, left_size);
 		p_right_median[i] = FindMedian(p_right_column_buf + i * right_size, right_size);
 	}
 
-
-
 	for (i = 0; i < tx_num; i++) {
 		for (j = 0; j < rx_num; j++) {
-
 			if (f54->swap_sensor_side) {
-
 				if (i < left_size) {
 					temp = (signed int) p_image[i * rx_num + j];
 					temp = temp * 100 / p_left_median[j];
@@ -3647,7 +3638,6 @@ static int tddi_ratio_calculation(signed short *p_image)
 					temp = temp * 100 / p_right_median[j];
 				}
 			} else {
-
 				if (i < right_size) {
 					temp = (signed int) p_image[i * rx_num + j];
 					temp = temp * 100 / p_right_median[j];
@@ -3656,7 +3646,6 @@ static int tddi_ratio_calculation(signed short *p_image)
 					temp = temp * 100 / p_left_median[j];
 				}
 			}
-
 
 			p_image[i * rx_num + j] = temp;
 		}
@@ -3706,7 +3695,6 @@ static ssize_t test_sysfs_tddi_extend_ee_short_store(struct device *dev,
 				__func__);
 		return -ENOMEM;
 	}
-
 
 	tddi_rt95_part_one = kzalloc(buffer_size, GFP_KERNEL);
 	if (!tddi_rt95_part_one) {
@@ -3848,7 +3836,6 @@ static ssize_t test_sysfs_tddi_extend_ee_short_store(struct device *dev,
 		offset += 2;
 	}
 
-
 	tddi_ratio_calculation(tddi_rt95_part_two);
 
 	for (i = 0; i < tx_num; i++) {
@@ -3940,8 +3927,6 @@ static ssize_t test_sysfs_tddi_extend_ee_short_show(struct device *dev,
 
 	if (!td43xx_ee_short_data)
 		return -EINVAL;
-
-
 
 	if (1 == g_flag_read_report_fail) {
 		kfree(td43xx_ee_short_data);
@@ -4071,7 +4056,6 @@ static ssize_t test_sysfs_td43xx_ee_short_show(struct device *dev,
 
 	if (!td43xx_ee_short_data)
 		return -EINVAL;
-
 
 	if (1 == g_flag_read_report_fail) {
 		kfree(td43xx_ee_short_data);
@@ -4374,7 +4358,6 @@ static int tddi_amp_open_data_testing_b7(signed short *p_image,
 		tx_num -= 1;
 	}
 
-
 	p_right_median = (signed short *) kzalloc(rx_num * sizeof(short), GFP_KERNEL);
 	if (!p_right_median) {
 		dev_err(rmi4_data->pdev->dev.parent,
@@ -4412,14 +4395,12 @@ static int tddi_amp_open_data_testing_b7(signed short *p_image,
 	}
 
 	if (f54->swap_sensor_side) {
-
 		p_data_16 = p_image;
 		for (i = 0; i < rx_num; i++) {
 			for (j = 0; j < left_size; j++) {
 				p_left_column_buf[i * left_size + j] = p_data_16[j * rx_num + i];
 			}
 		}
-
 		p_data_16 = p_image + left_size * rx_num;
 		for (i = 0; i < rx_num; i++) {
 			for (j = 0; j < right_size; j++) {
@@ -4427,14 +4408,12 @@ static int tddi_amp_open_data_testing_b7(signed short *p_image,
 			}
 		}
 	} else {
-
 		p_data_16 = p_image;
 		for (i = 0; i < rx_num; i++) {
 			for (j = 0; j < right_size; j++) {
 				p_right_column_buf[i * right_size + j] = p_data_16[j * rx_num + i];
 			}
 		}
-
 		p_data_16 = p_image + right_size * rx_num;
 		for (i = 0; i < rx_num; i++) {
 			for (j = 0; j < left_size; j++) {
@@ -4443,19 +4422,16 @@ static int tddi_amp_open_data_testing_b7(signed short *p_image,
 		}
 	}
 
-
 	for (i = 0; i < rx_num; i++) {
 		p_left_median[i] = FindMedian(p_left_column_buf + i * left_size, left_size);
 		p_right_median[i] = FindMedian(p_right_column_buf + i * right_size, right_size);
 	}
 
 
-
 	for (i = 0; i < tx_num; i++) {
 		for (j = 0; j < rx_num; j++) {
 
 			if (f54->swap_sensor_side) {
-
 				if (i < left_size) {
 					temp = (signed int) p_image[i * rx_num + j];
 					temp = temp * 100 / p_left_median[j];
@@ -4464,7 +4440,6 @@ static int tddi_amp_open_data_testing_b7(signed short *p_image,
 					temp = temp * 100 / p_right_median[j];
 				}
 			} else {
-
 				if (i < right_size) {
 					temp = (signed int) p_image[i * rx_num + j];
 					temp = temp * 100 / p_right_median[j];
@@ -4475,8 +4450,6 @@ static int tddi_amp_open_data_testing_b7(signed short *p_image,
 			}
 
 			p_result[i * rx_num + j] =  0;
-
-
 
 			if (is_b7) {
 				if ((temp < factory_param->tddi_b7_open_test_limit_phase2_lower) ||
@@ -4546,7 +4519,6 @@ static ssize_t test_sysfs_td4722_b7_amp_open_store(struct device *dev,
 		return -ENOMEM;
 	}
 
-
 	p_report_data_8 = kzalloc(tx_num * rx_num * 2, GFP_KERNEL);
 	if (!p_report_data_8) {
 		dev_err(rmi4_data->pdev->dev.parent,
@@ -4591,7 +4563,6 @@ static ssize_t test_sysfs_td4722_b7_amp_open_store(struct device *dev,
 	}
 
 
-
 	if (f54->query.touch_controller_family != 2) {
 		dev_err(rmi4_data->pdev->dev.parent,
 				"%s: not support touch controller family = 0 or 1 \n",
@@ -4599,8 +4570,6 @@ static ssize_t test_sysfs_td4722_b7_amp_open_store(struct device *dev,
 		retval = -EINVAL;
 		goto exit;
 	}
-
-
 	retval = synaptics_rmi4_reg_read(rmi4_data,
 			control.reg_99->address,
 			original_data_f54_ctrl99,
@@ -4640,7 +4609,6 @@ static ssize_t test_sysfs_td4722_b7_amp_open_store(struct device *dev,
 		retval = -EIO;
 		goto exit;
 	}
-
 	retval = test_sysfs_read_report_td43xx(dev, attr, "92", count,
 				false, false);
 	if (retval < 0) {
@@ -4655,7 +4623,6 @@ static ssize_t test_sysfs_td4722_b7_amp_open_store(struct device *dev,
 	secure_memcpy(p_report_data_8, tx_num * rx_num * 2,
 		f54->report_data, f54->report_size, f54->report_size);
 
-
 	k = 0;
 	for (i = 0; i < tx_num; i++) {
 		for (j = 0; j < rx_num; j++) {
@@ -4665,7 +4632,6 @@ static ssize_t test_sysfs_td4722_b7_amp_open_store(struct device *dev,
 			k += 2;
 		}
 	}
-
 
 	tddi_amp_open_data_testing_b7(p_rt92_image_1,
 								p_result_1,
@@ -4698,7 +4664,6 @@ static ssize_t test_sysfs_td4722_b7_amp_open_store(struct device *dev,
 		retval = -EIO;
 		goto exit;
 	}
-
 	retval = test_sysfs_read_report_td43xx(dev, attr, "92", count,
 				false, false);
 	if (retval < 0) {
@@ -4713,7 +4678,6 @@ static ssize_t test_sysfs_td4722_b7_amp_open_store(struct device *dev,
 	secure_memcpy(p_report_data_8, tx_num * rx_num * 2,
 		f54->report_data, f54->report_size, f54->report_size);
 
-
 	k = 0;
 	for (i = 0; i < tx_num; i++) {
 		for (j = 0; j < rx_num; j++) {
@@ -4723,7 +4687,6 @@ static ssize_t test_sysfs_td4722_b7_amp_open_store(struct device *dev,
 			k += 2;
 		}
 	}
-
 
 	tddi_amp_open_data_testing_b7(p_rt92_image_2,
 								p_result_2,
@@ -4769,7 +4732,6 @@ static ssize_t test_sysfs_td4722_b7_amp_open_store(struct device *dev,
 
 
 exit:
-
 	kfree(p_rt92_image_1);
 	kfree(p_rt92_image_2);
 	kfree(p_report_data_8);
@@ -4797,7 +4759,6 @@ static ssize_t test_sysfs_td4722_b7_amp_open_show(struct device *dev,
 
 	if (!td43xx_amp_open_data)
 		return -EINVAL;
-
 
 	if (1 == g_flag_read_report_fail) {
 		kfree(td43xx_amp_open_data);
@@ -5225,7 +5186,6 @@ static ssize_t test_sysfs_td43xx_amp_open_show(struct device *dev,
 	if (!td43xx_amp_open_data)
 		return -EINVAL;
 
-
 	if (1 == g_flag_read_report_fail) {
 		kfree(td43xx_amp_open_data);
 		td43xx_amp_open_data = NULL;
@@ -5276,7 +5236,6 @@ static ssize_t test_sysfs_tddi_amp_electrode_open_store(struct device *dev,
 	if (setting != 1 || !factory_param)
 		return -EINVAL;
 
-
 	if (td43xx_amp_open_data)
 		kfree(td43xx_amp_open_data);
 	td43xx_amp_open_data = kzalloc(tx_num * rx_num, GFP_KERNEL);
@@ -5286,7 +5245,6 @@ static ssize_t test_sysfs_tddi_amp_electrode_open_store(struct device *dev,
 				__func__);
 		return -ENOMEM;
 	}
-
 
 	p_report_data_8 = kzalloc(tx_num * rx_num * 2, GFP_KERNEL);
 	if (!p_report_data_8) {
@@ -5620,7 +5578,6 @@ static ssize_t test_sysfs_tddi_amp_electrode_open_store(struct device *dev,
 	/* phase 2, data calculation and verification */
 	/* the calculated ratio should be lower than the test limit */
 
-
 	tddi_ratio_calculation(p_rt92_delta_image);
 	for (i = 0; i < tx_num; i++) {
 		for (j = 0; j < rx_num; j++) {
@@ -5654,7 +5611,6 @@ static ssize_t test_sysfs_tddi_amp_electrode_open_store(struct device *dev,
 	}
 
 exit:
-
 	kfree(p_report_data_8);
 	kfree(p_rt92_image_1);
 	kfree(p_rt92_image_2);

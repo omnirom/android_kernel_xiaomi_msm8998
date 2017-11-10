@@ -126,7 +126,6 @@
 #define PINCTRL_STATE_ACTIVE	"pmx_ts_active"
 #define PINCTRL_STATE_SUSPEND	"pmx_ts_suspend"
 
-
 enum exp_fn {
 	RMI_DEV = 0,
 	RMI_FW_UPDATER,
