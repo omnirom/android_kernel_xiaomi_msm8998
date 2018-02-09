@@ -174,7 +174,7 @@ static struct dentry *__sdcardfs_interpose(struct dentry *dentry,
 	struct inode *inode;
 	struct inode *lower_inode;
 	struct super_block *lower_sb;
-	struct dentry *ret_dentry;
+	struct dentry *ret_dentry = NULL;
 
 	lower_inode = d_inode(lower_path->dentry);
 	lower_sb = sdcardfs_lower_super(sb);
@@ -199,6 +199,7 @@ static struct dentry *__sdcardfs_interpose(struct dentry *dentry,
 
 	ret_dentry = d_splice_alias(inode, dentry);
 	dentry = ret_dentry ?: dentry;
+
 	if (!IS_ERR(dentry))
 		update_derived_permission_lock(dentry);
 out:

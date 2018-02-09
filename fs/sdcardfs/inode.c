@@ -106,7 +106,6 @@ static int sdcardfs_create(struct inode *dir, struct dentry *dentry,
 	if (err)
 		goto out;
 	fsstack_copy_attr_times(dir, sdcardfs_lower_inode(dir));
-	fsstack_copy_inode_size(dir, d_inode(lower_parent_dentry));
 	fixup_lower_ownership(dentry, dentry->d_name.name);
 
 out:
@@ -861,6 +860,7 @@ static int sdcardfs_getattr(struct vfsmount *mnt, struct dentry *dentry,
 		goto out;
 	sdcardfs_copy_and_fix_attrs(d_inode(dentry),
 			      d_inode(lower_path.dentry));
+	fsstack_copy_inode_size(d_inode(dentry), d_inode(lower_path.dentry));
 	err = sdcardfs_fillattr(mnt, d_inode(dentry), stat);
 	stat->blocks = lower_stat.blocks;
 out:
