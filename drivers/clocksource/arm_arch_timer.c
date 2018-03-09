@@ -329,13 +329,10 @@ static void arch_counter_set_user_access(void)
 
 	/* Disable user access to the timers and the physical counter */
 	/* Also disable virtual event stream */
-	cntkctl &= ~(ARCH_TIMER_USR_PT_ACCESS_EN
-			| ARCH_TIMER_VIRT_EVT_EN
-			| ARCH_TIMER_USR_PCT_ACCESS_EN);
+	cntkctl &= ~(ARCH_TIMER_USR_PT_ACCESS_EN | ARCH_TIMER_VIRT_EVT_EN);
 
-	/* Enable user access to the virtual counter */
-	cntkctl |= ARCH_TIMER_USR_VT_ACCESS_EN;
-
+	/* Enable user access to the virtual and physical counters */
+	cntkctl |= ARCH_TIMER_USR_PCT_ACCESS_EN | ARCH_TIMER_USR_VT_ACCESS_EN;
 	if (IS_ENABLED(CONFIG_ARM_ARCH_TIMER_VCT_ACCESS))
 		cntkctl |= ARCH_TIMER_USR_VCT_ACCESS_EN;
 	else
