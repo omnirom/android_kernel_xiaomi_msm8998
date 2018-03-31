@@ -9045,9 +9045,11 @@ static int __iw_setchar_getnone(struct net_device *dev,
 		tRrmNeighborRspCallbackInfo callbackInfo;
 
 		if (pConfig->fRrmEnable) {
-			hdd_debug("Neighbor Request");
+			neighborReq.neighbor_report_offload = false;
 			neighborReq.no_ssid =
 				(s_priv_data.length - 1) ? false : true;
+			hdd_debug("Neighbor Request ssid present %d",
+				  neighborReq.no_ssid);
 			if (!neighborReq.no_ssid) {
 				neighborReq.ssid.length =
 					(s_priv_data.length - 1) >
@@ -9057,14 +9059,25 @@ static int __iw_setchar_getnone(struct net_device *dev,
 					     neighborReq.ssid.length);
 			}
 
+			/*
+			 * If 11k offload is supported by FW and enabled
+			 * in the ini, set the offload to true
+			 */
+			if (hdd_ctx->config->is_11k_offload_supported &&
+			    (hdd_ctx->config->offload_11k_enable_bitmask &
+			    OFFLOAD_11K_BITMASK_NEIGHBOR_REPORT_REQUEST)) {
+				hdd_debug("Neighbor report offloaded to FW");
+				neighborReq.neighbor_report_offload = true;
+			}
+
 			callbackInfo.neighborRspCallback = NULL;
 			callbackInfo.neighborRspCallbackContext = NULL;
-			callbackInfo.timeout = 5000;            /* 5 seconds */
-			sme_neighbor_report_request(WLAN_HDD_GET_HAL_CTX
-							    (pAdapter),
-						    pAdapter->sessionId,
-						    &neighborReq,
-						    &callbackInfo);
+			callbackInfo.timeout = 5000; /* 5 seconds */
+			sme_neighbor_report_request(
+					WLAN_HDD_GET_HAL_CTX(pAdapter),
+					pAdapter->sessionId,
+					&neighborReq,
+					&callbackInfo);
 		} else {
 			hdd_err("Ignoring neighbor request as RRM not enabled");
 			ret = -EINVAL;
@@ -11458,13 +11471,14 @@ static int __iw_set_host_offload(struct net_device *dev,
 		}
 	}
 
-	/* Execute offload request. The reason that we can copy the
-	 * request information from the ioctl structure to the SME
-	 * structure is that they are laid out exactly the same.
-	 * Otherwise, each piece of information would have to be
-	 * copied individually.
-	 */
-	memcpy(&offloadRequest, pRequest, wrqu->data.length);
+	qdf_mem_zero(&offloadRequest, sizeof(offloadRequest));
+	offloadRequest.offloadType = pRequest->offloadType;
+	offloadRequest.enableOrDisable = pRequest->enableOrDisable;
+	qdf_mem_copy(&offloadRequest.params, &pRequest->params,
+		     sizeof(pRequest->params));
+	qdf_mem_copy(&offloadRequest.bssid, &pRequest->bssId.bytes,
+		     QDF_MAC_ADDR_SIZE);
+
 	if (QDF_STATUS_SUCCESS !=
 	    sme_set_host_offload(WLAN_HDD_GET_HAL_CTX(pAdapter),
 				 pAdapter->sessionId, &offloadRequest)) {

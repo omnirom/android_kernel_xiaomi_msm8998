@@ -543,7 +543,7 @@ QDF_STATUS sme_set_host_offload(tHalHandle hHal, uint8_t sessionId,
  * Return: QDF_STATUS
  */
 QDF_STATUS sme_conf_hw_filter_mode(tHalHandle hal, uint8_t session_id,
-				   uint8_t mode_bitmap);
+				   uint8_t mode_bitmap, bool filter_enable);
 
 QDF_STATUS sme_set_keep_alive(tHalHandle hHal, uint8_t sessionId,
 		tpSirKeepAliveReq pRequest);
@@ -997,11 +997,6 @@ QDF_STATUS sme_ll_stats_set_thresh(tHalHandle hal,
 				struct sir_ll_ext_stats_threshold *threshold);
 #endif /* WLAN_FEATURE_LINK_LAYER_STATS */
 
-QDF_STATUS sme_fw_mem_dump(tHalHandle hHal, void *recvd_req);
-QDF_STATUS sme_fw_mem_dump_register_cb(tHalHandle hHal,
-		void (*callback_routine)(void *cb_context,
-		struct fw_dump_rsp *rsp));
-QDF_STATUS sme_fw_mem_dump_unregister_cb(tHalHandle hHal);
 QDF_STATUS sme_set_wisa_params(tHalHandle hal,
 				struct sir_wisa_params *wisa_params);
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD

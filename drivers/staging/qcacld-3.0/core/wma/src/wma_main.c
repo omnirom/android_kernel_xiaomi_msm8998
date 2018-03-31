@@ -2254,7 +2254,7 @@ static int wma_rx_service_available_event(void *handle, uint8_t *cmd_param_info,
 	wma_handle->wmi_service_ext_offset = ev->wmi_service_segment_offset;
 	qdf_mem_copy(wma_handle->wmi_service_ext_bitmap,
 				&ev->wmi_service_segment_bitmap[0],
-				WMI_SERVICE_EXT_BM_SIZE32);
+				WMI_SERVICE_EXT_BM_SIZE32 * sizeof(A_UINT32));
 
 	return 0;
 }
@@ -2685,15 +2685,6 @@ QDF_STATUS wma_open(void *cds_context,
 
 #endif /* WLAN_FEATURE_LINK_LAYER_STATS */
 
-	/*
-	 * Register event handler to receive firmware mem dump
-	 * copy complete indication
-	 */
-	wmi_unified_register_event_handler(wma_handle->wmi_handle,
-			WMI_UPDATE_FW_MEM_DUMP_EVENTID,
-			wma_fw_mem_dump_event_handler,
-			WMA_RX_SERIALIZER_CTX);
-
 	wmi_set_tgt_assert(wma_handle->wmi_handle,
 			   cds_cfg->force_target_assert_enabled);
 	/* Firmware debug log */
@@ -3091,6 +3082,12 @@ static int wma_pdev_set_hw_mode_resp_evt_handler(void *handle,
 	}
 
 	wmi_event = param_buf->fixed_param;
+	if (wmi_event->num_vdev_mac_entries >
+	    param_buf->num_wmi_pdev_set_hw_mode_response_vdev_mac_mapping) {
+		WMA_LOGE("Invalid num_vdev_mac_entries: %d",
+				wmi_event->num_vdev_mac_entries);
+		goto fail;
+	}
 	hw_mode_resp->status = wmi_event->status;
 	hw_mode_resp->cfgd_hw_mode_index = wmi_event->cfgd_hw_mode_index;
 	hw_mode_resp->num_vdev_mac_entries = wmi_event->num_vdev_mac_entries;
@@ -3266,6 +3263,13 @@ static int wma_pdev_hw_mode_transition_evt_handler(void *handle,
 	wmi_event = param_buf->fixed_param;
 	vdev_mac_entry =
 		param_buf->wmi_pdev_set_hw_mode_response_vdev_mac_mapping;
+	if (wmi_event->num_vdev_mac_entries >
+	    param_buf->num_wmi_pdev_set_hw_mode_response_vdev_mac_mapping) {
+		WMA_LOGE("Invalid num_vdev_mac_entries: %d",
+			 wmi_event->num_vdev_mac_entries);
+		qdf_mem_free(hw_mode_trans_ind);
+		return -EINVAL;
+	}
 	wma_process_pdev_hw_mode_trans_ind(wma, wmi_event, vdev_mac_entry,
 		hw_mode_trans_ind);
 	/* Pass the message to PE */
@@ -4235,6 +4239,11 @@ static inline void wma_update_target_services(tp_wma_handle wh,
 			wh->wmi_service_ext_bitmap,
 			WMI_SERVICE_FILS_SUPPORT))
 		cfg->is_fils_roaming_supported = true;
+
+	if (WMI_SERVICE_EXT_IS_ENABLED(wh->wmi_service_bitmap,
+			wh->wmi_service_ext_bitmap,
+			WMI_SERVICE_11K_NEIGHBOUR_REPORT_SUPPORT))
+		cfg->is_11k_offload_supported = true;
 }
 
 /**
@@ -4714,7 +4723,6 @@ static void wma_update_hdd_cfg(tp_wma_handle wma_handle)
 	tgt_cfg.wmi_max_len = wmi_get_max_msg_len(wma_handle->wmi_handle)
 			      - WMI_TLV_HEADROOM;
 	wma_setup_egap_support(&tgt_cfg, wma_handle);
-	tgt_cfg.fw_mem_dump_enabled = wma_handle->fw_mem_dump_enabled;
 	tgt_cfg.tx_bfee_8ss_enabled = wma_handle->tx_bfee_8ss_enabled;
 	wma_update_hdd_cfg_ndp(wma_handle, &tgt_cfg);
 	wma_handle->tgt_cfg_update_cb(hdd_ctx, &tgt_cfg);
@@ -5135,12 +5143,6 @@ int wma_rx_service_ready_event(void *handle, uint8_t *cmd_param_info,
 		}
 	}
 #endif /* WLAN_FEATURE_GTK_OFFLOAD */
-
-	if (WMI_SERVICE_IS_ENABLED(wma_handle->wmi_service_bitmap,
-				   WMI_SERVICE_FW_MEM_DUMP_SUPPORT))
-		wma_handle->fw_mem_dump_enabled = true;
-	else
-		wma_handle->fw_mem_dump_enabled = false;
 
 	status = wmi_unified_register_event_handler(wma_handle->wmi_handle,
 						    WMI_P2P_NOA_EVENTID,
@@ -5783,8 +5785,9 @@ static void wma_populate_soc_caps(t_wma_handle *wma_handle,
 		return;
 	}
 
-	if (param_buf->soc_hw_mode_caps->num_hw_modes >
-			MAX_NUM_HW_MODE) {
+	if ((param_buf->soc_hw_mode_caps->num_hw_modes > MAX_NUM_HW_MODE) ||
+	    (param_buf->soc_hw_mode_caps->num_hw_modes >
+	    param_buf->num_hw_mode_caps)) {
 		WMA_LOGE("Invalid num_hw_modes %u received from firmware",
 			 param_buf->soc_hw_mode_caps->num_hw_modes);
 		return;
@@ -5865,10 +5868,12 @@ static void wma_populate_soc_caps(t_wma_handle *wma_handle,
 	 * next thing is to populate reg caps per phy
 	 */
 
-	if (param_buf->soc_hal_reg_caps->num_phy >
-			MAX_NUM_PHY) {
+	if ((param_buf->soc_hal_reg_caps->num_phy > MAX_NUM_PHY) ||
+	    (param_buf->soc_hal_reg_caps->num_phy >
+	    param_buf->num_hal_reg_caps)) {
 		WMA_LOGE("Invalid num_phy %u received from firmware",
 			 param_buf->soc_hal_reg_caps->num_phy);
+		wma_cleanup_dbs_phy_caps(wma_handle);
 		return;
 	}
 
@@ -6793,6 +6798,11 @@ static void wma_set_arp_req_stats(WMA_HANDLE handle,
 			 __func__);
 		return;
 	}
+	if (!wma_is_vdev_valid(req_buf->vdev_id)) {
+		WMA_LOGE("vdev id not active or not valid");
+		return;
+	}
+
 	arp_stats = (struct set_arp_stats *)req_buf;
 	status = wmi_unified_set_arp_stats_req(wma_handle->wmi_handle,
 					       arp_stats);
@@ -6811,6 +6821,10 @@ static void wma_get_arp_req_stats(WMA_HANDLE handle,
 	if (!wma_handle || !wma_handle->wmi_handle) {
 		WMA_LOGE("%s: WMA is closed, cannot send per roam config",
 			 __func__);
+		return;
+	}
+	if (!wma_is_vdev_valid(req_buf->vdev_id)) {
+		WMA_LOGE("vdev not active or not valid");
 		return;
 	}
 
@@ -6846,6 +6860,34 @@ static void wma_set_del_pmkid_cache(WMA_HANDLE handle,
 						 pmk_cache, vdev_id);
 	if (status != EOK)
 		WMA_LOGE("failed to send set/del pmkid cmd to fw");
+}
+
+/**
+ * wma_send_invoke_neighbor_report() - API to send invoke neighbor report
+ * command to fw
+ *
+ * @handle: WMA handle
+ * @params: Pointer to invoke neighbor report params
+ *
+ * Return: None
+ */
+static
+void wma_send_invoke_neighbor_report(WMA_HANDLE handle,
+			struct wmi_invoke_neighbor_report_params *params)
+{
+	QDF_STATUS status;
+	tp_wma_handle wma_handle = (tp_wma_handle) handle;
+
+	if (!wma_handle || !wma_handle->wmi_handle) {
+		WMA_LOGE("WMA is closed, cannot send invoke neighbor report");
+		return;
+	}
+
+	status = wmi_unified_invoke_neighbor_report_cmd(wma_handle->wmi_handle,
+							params);
+
+	if (status != QDF_STATUS_SUCCESS)
+		WMA_LOGE("failed to send invoke neighbor report command");
 }
 
 /**
@@ -7824,6 +7866,8 @@ QDF_STATUS wma_mc_process_msg(void *cds_context, cds_msg_t *msg)
 		wma_config_guard_time(wma_handle,
 				      (struct sir_guard_time_request *)
 				      msg->bodyptr);
+		qdf_mem_free(msg->bodyptr);
+		break;
 	case WMA_IPA_OFFLOAD_ENABLE_DISABLE:
 		wma_ipa_offload_enable_disable(wma_handle,
 			(struct sir_ipa_offload_enable_disable *)msg->bodyptr);
@@ -7848,11 +7892,6 @@ QDF_STATUS wma_mc_process_msg(void *cds_context, cds_msg_t *msg)
 	case WDA_SET_UDP_RESP_OFFLOAD:
 		wma_send_udp_resp_offload_cmd(wma_handle,
 			(struct udp_resp_offload *)msg->bodyptr);
-		qdf_mem_free(msg->bodyptr);
-		break;
-	case WMA_FW_MEM_DUMP_REQ:
-		wma_process_fw_mem_dump_req(wma_handle,
-			(struct fw_dump_req *)msg->bodyptr);
 		qdf_mem_free(msg->bodyptr);
 		break;
 	case SIR_HAL_PDEV_SET_PCL_TO_FW:
@@ -8021,7 +8060,7 @@ QDF_STATUS wma_mc_process_msg(void *cds_context, cds_msg_t *msg)
 		qdf_mem_free(msg->bodyptr);
 		break;
 	case WMA_CONF_HW_FILTER: {
-		struct hw_filter_request *req = msg->bodyptr;
+		struct wmi_hw_filter_req_params *req = msg->bodyptr;
 
 		qdf_status = wma_conf_hw_filter_mode(wma_handle, req);
 		break;
@@ -8084,6 +8123,10 @@ QDF_STATUS wma_mc_process_msg(void *cds_context, cds_msg_t *msg)
 	case SIR_HAL_HLP_IE_INFO:
 		wma_roam_scan_send_hlp(wma_handle,
 			(struct hlp_params *)msg->bodyptr);
+		qdf_mem_free(msg->bodyptr);
+		break;
+	case WMA_INVOKE_NEIGHBOR_REPORT:
+		wma_send_invoke_neighbor_report(wma_handle, msg->bodyptr);
 		qdf_mem_free(msg->bodyptr);
 		break;
 	default:

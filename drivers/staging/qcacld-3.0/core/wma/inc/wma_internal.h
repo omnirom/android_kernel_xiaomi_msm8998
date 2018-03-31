@@ -288,20 +288,11 @@ A_UINT32 e_csr_auth_type_to_rsn_authmode(eCsrAuthType authtype,
 
 A_UINT32 e_csr_encryption_type_to_rsn_cipherset(eCsrEncryptionType encr);
 
-void wma_roam_scan_fill_ap_profile(tp_wma_handle wma_handle,
-				   tpAniSirGlobal pMac,
-				   tSirRoamOffloadScanReq *roam_req,
-				   wmi_ap_profile *ap_profile_p);
-
 void wma_roam_scan_fill_scan_params(tp_wma_handle wma_handle,
 				    tpAniSirGlobal pMac,
 				    tSirRoamOffloadScanReq *roam_req,
 				    wmi_start_scan_cmd_fixed_param *
 				    scan_params);
-
-QDF_STATUS wma_roam_scan_offload_ap_profile(tp_wma_handle wma_handle,
-					    wmi_ap_profile *ap_profile_p,
-					    uint32_t vdev_id);
 
 QDF_STATUS wma_roam_scan_bmiss_cnt(tp_wma_handle wma_handle,
 				   A_INT32 first_bcnt,
@@ -1113,12 +1104,12 @@ QDF_STATUS wma_enable_arp_ns_offload(tp_wma_handle wma,
 /**
  * wma_conf_hw_filter_mode() - configure hw filter to the given mode
  * @wma: wma handle
- * @req: hardware filter request
+ * @req: hardware filter request parameters
  *
  * Return: QDF_STATUS
  */
 QDF_STATUS wma_conf_hw_filter_mode(tp_wma_handle wma,
-				   struct hw_filter_request *req);
+				   struct wmi_hw_filter_req_params *req);
 
 QDF_STATUS wma_process_cesium_enable_ind(tp_wma_handle wma);
 
@@ -1273,24 +1264,7 @@ void wma_set_sap_keepalive(tp_wma_handle wma, uint8_t vdev_id);
 
 int wma_rssi_breached_event_handler(void *handle,
 				u_int8_t  *cmd_param_info, u_int32_t len);
-#ifdef WLAN_FEATURE_MEMDUMP
-int wma_fw_mem_dump_event_handler(void *handle, u_int8_t *cmd_param_info,
-				  u_int32_t len);
-QDF_STATUS wma_process_fw_mem_dump_req(tp_wma_handle wma,
-					struct fw_dump_req *mem_dump_req);
-#else
-static inline int wma_fw_mem_dump_event_handler(void *handle,
-			u_int8_t *cmd_param_info, u_int32_t len)
-{
-	return 0;
-}
 
-static inline QDF_STATUS wma_process_fw_mem_dump_req(tp_wma_handle wma,
-						     void *mem_dump_req)
-{
-	return QDF_STATUS_SUCCESS;
-}
-#endif
 QDF_STATUS wma_process_set_ie_info(tp_wma_handle wma,
 				   struct vdev_ie_info *ie_info);
 int wma_peer_assoc_conf_handler(void *handle, uint8_t *cmd_param_info,

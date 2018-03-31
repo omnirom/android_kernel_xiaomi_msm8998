@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -86,6 +86,8 @@
  * MCL platform.
  */
 #define WMA_SET_VDEV_IE_SOURCE_HOST 0x0
+#define WMI_TLV_HEADER_MASK		0xFFFF0000
+
 
 static const uint8_t arp_ptrn[] = {0x08, 0x06};
 static const uint8_t arp_mask[] = {0xff, 0xff};
@@ -1652,9 +1654,10 @@ int wma_nan_rsp_event_handler(void *handle, uint8_t *event_buf,
 	alloc_len = sizeof(tSirNanEvent);
 	alloc_len += nan_rsp_event_hdr->data_len;
 	if (nan_rsp_event_hdr->data_len > ((WMI_SVC_MSG_MAX_SIZE -
-	    sizeof(*nan_rsp_event_hdr)) / sizeof(uint8_t))) {
-		WMA_LOGE("excess data length:%d", nan_rsp_event_hdr->data_len);
-		QDF_ASSERT(0);
+	    sizeof(*nan_rsp_event_hdr)) / sizeof(uint8_t)) ||
+	    nan_rsp_event_hdr->data_len > param_buf->num_data) {
+		WMA_LOGE("excess data length:%d, num_data:%d",
+			nan_rsp_event_hdr->data_len, param_buf->num_data);
 		return -EINVAL;
 	}
 	nan_rsp_event = (tSirNanEvent *) qdf_mem_malloc(alloc_len);
@@ -2337,6 +2340,11 @@ QDF_STATUS wma_extract_comb_phyerr_spectral(void *handle, void *data,
 
 	phyerr->bufp = param_tlvs->bufp;
 	phyerr->buf_len = pe_hdr->buf_len;
+	if (phyerr->buf_len > param_tlvs->num_bufp) {
+		WMA_LOGE("Invalid buf_len %d, num_bufp %d",
+				phyerr->buf_len, param_tlvs->num_bufp);
+		return -EINVAL;
+	}
 
 	phyerr->phy_err_mask0 = pe_hdr->rsPhyErrMask0;
 	phyerr->phy_err_mask1 = pe_hdr->rsPhyErrMask1;
@@ -4504,6 +4512,11 @@ int wma_wow_wakeup_host_event(void *handle, uint8_t *event,
 		 * In case of wow_packet_buffer, first 4 bytes is the length.
 		 * Following the length is the actual buffer.
 		 */
+		if (param_buf->num_wow_packet_buffer <= 4) {
+			WMA_LOGE("Invalid wow packet buffer from firmware %u",
+				  param_buf->num_wow_packet_buffer);
+			return -EINVAL;
+		}
 		wow_buf_pkt_len = *(uint32_t *)param_buf->wow_packet_buffer;
 		if (wow_buf_pkt_len > (param_buf->num_wow_packet_buffer - 4)) {
 			WMA_LOGE("Invalid wow buf pkt len from firmware, wow_buf_pkt_len: %u, num_wow_packet_buffer: %u",
@@ -7142,28 +7155,18 @@ QDF_STATUS wma_enable_arp_ns_offload(tp_wma_handle wma,
 }
 
 QDF_STATUS wma_conf_hw_filter_mode(tp_wma_handle wma,
-				   struct hw_filter_request *req)
+				   struct wmi_hw_filter_req_params *req)
 {
 	QDF_STATUS status;
-	uint8_t vdev_id;
 
-	/* Get the vdev id */
-	if (!wma_find_vdev_by_bssid(wma, req->bssid.bytes, &vdev_id)) {
-		WMA_LOGE("vdev handle is invalid for %pM",
-			 req->bssid.bytes);
-		qdf_mem_free(req);
-		return QDF_STATUS_E_INVAL;
-	}
-
-	if (!wma->interfaces[vdev_id].vdev_up) {
+	if (!wma->interfaces[req->vdev_id].vdev_up) {
 		WMA_LOGE("vdev %d is not up skipping enable Broadcast Filter",
-			 vdev_id);
+			 req->vdev_id);
 		qdf_mem_free(req);
 		return QDF_STATUS_E_FAILURE;
 	}
 
-	status = wmi_unified_conf_hw_filter_mode_cmd(wma->wmi_handle, vdev_id,
-						     req->mode_bitmap);
+	status = wmi_unified_conf_hw_filter_mode_cmd(wma->wmi_handle, req);
 	if (QDF_IS_STATUS_ERROR(status))
 		WMA_LOGE("Failed to enable/disable Broadcast Filter");
 
@@ -7966,7 +7969,11 @@ int wma_channel_avoid_evt_handler(void *handle, uint8_t *event,
 		(afr_fixed_param->num_freq_ranges >
 		 SIR_CH_AVOID_MAX_RANGE) ? SIR_CH_AVOID_MAX_RANGE :
 		afr_fixed_param->num_freq_ranges;
-
+	if (num_freq_ranges > param_buf->num_avd_freq_range) {
+		WMA_LOGE("Invalid num_freq_ranges %d, avd_freq_range %d",
+			num_freq_ranges, param_buf->num_avd_freq_range);
+		return -EINVAL;
+	}
 	WMA_LOGD("Channel avoid event received with %d ranges",
 		 num_freq_ranges);
 	for (freq_range_idx = 0; freq_range_idx < num_freq_ranges;
@@ -9425,119 +9432,6 @@ int wma_dfs_indicate_radar(struct ieee80211com *ic,
 	return 0;
 }
 
-#ifdef WLAN_FEATURE_MEMDUMP
-/*
- * wma_process_fw_mem_dump_req() - Function to request fw memory dump from
- *                                 firmware
- * @wma:                Pointer to WMA handle
- * @mem_dump_req:       Pointer for mem_dump_req
- *
- * This function sends memory dump request to firmware
- *
- * Return: QDF_STATUS_SUCCESS for success otherwise failure
- *
- */
-QDF_STATUS wma_process_fw_mem_dump_req(tp_wma_handle wma,
-					struct fw_dump_req *mem_dump_req)
-{
-	int ret;
-
-	if (!mem_dump_req || !wma) {
-		WMA_LOGE(FL("input pointer is NULL"));
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	ret = wmi_unified_process_fw_mem_dump_cmd(wma->wmi_handle,
-			 (struct fw_dump_req_param *) mem_dump_req);
-	if (ret)
-		return QDF_STATUS_E_FAILURE;
-
-	return QDF_STATUS_SUCCESS;
-}
-
-/**
- * wma_fw_mem_dump_rsp() - send fw mem dump response to SME
- *
- * @req_id - request id.
- * @status - copy status from the firmware.
- *
- * This function is called by the memory dump response handler to
- * indicate SME that firmware dump copy is complete
- *
- * Return: QDF_STATUS
- */
-static QDF_STATUS wma_fw_mem_dump_rsp(uint32_t req_id, uint32_t status)
-{
-	struct fw_dump_rsp *dump_rsp;
-	cds_msg_t sme_msg = {0};
-	QDF_STATUS qdf_status = QDF_STATUS_SUCCESS;
-
-	dump_rsp = qdf_mem_malloc(sizeof(*dump_rsp));
-
-	if (!dump_rsp) {
-		WMA_LOGE(FL("Memory allocation failed."));
-		qdf_status = QDF_STATUS_E_NOMEM;
-		return qdf_status;
-	}
-
-	WMA_LOGD(FL("FW memory dump copy complete status: %d for request: %d"),
-		 status, req_id);
-
-	dump_rsp->request_id = req_id;
-	dump_rsp->dump_complete = status;
-
-	sme_msg.type = eWNI_SME_FW_DUMP_IND;
-	sme_msg.bodyptr = dump_rsp;
-	sme_msg.bodyval = 0;
-
-	qdf_status = cds_mq_post_message(QDF_MODULE_ID_SME, &sme_msg);
-	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
-		WMA_LOGE(FL("Fail to post fw mem dump ind msg"));
-		qdf_mem_free(dump_rsp);
-	}
-
-	return qdf_status;
-}
-
-/**
- * wma_fw_mem_dump_event_handler() - handles fw memory dump event
- *
- * @handle: pointer to wma handle.
- * @cmd_param_info: pointer to TLV info received in the event.
- * @len: length of data in @cmd_param_info
- *
- * This function is a handler for firmware memory dump event.
- *
- * Return: integer (0 for success and error code otherwise)
- */
-int wma_fw_mem_dump_event_handler(void *handle, u_int8_t *cmd_param_info,
-					 u_int32_t len)
-{
-	WMI_UPDATE_FW_MEM_DUMP_EVENTID_param_tlvs *param_buf;
-	wmi_update_fw_mem_dump_fixed_param *event;
-	QDF_STATUS status;
-
-	param_buf =
-	    (WMI_UPDATE_FW_MEM_DUMP_EVENTID_param_tlvs *) cmd_param_info;
-	if (!param_buf) {
-		WMA_LOGA("%s: Invalid stats event", __func__);
-		return -EINVAL;
-	}
-
-	event = param_buf->fixed_param;
-
-	status = wma_fw_mem_dump_rsp(event->request_id,
-					 event->fw_mem_dump_complete);
-	if (QDF_STATUS_SUCCESS != status) {
-		WMA_LOGE("Error posting FW MEM DUMP RSP.");
-		return -EINVAL;
-	}
-
-	WMA_LOGD("FW MEM DUMP RSP posted successfully");
-	return 0;
-}
-#endif /* WLAN_FEATURE_MEMDUMP */
-
 /*
  * wma_process_set_ie_info() - Function to send IE info to firmware
  * @wma:                Pointer to WMA handle
@@ -10326,6 +10220,8 @@ int wma_get_arp_stats_handler(void *handle, uint8_t *data,
 {
 	WMI_VDEV_GET_ARP_STAT_EVENTID_param_tlvs *param_buf;
 	wmi_vdev_get_arp_stats_event_fixed_param *data_event;
+	wmi_vdev_get_connectivity_check_stats *connect_stats_event;
+	uint8_t *buf_ptr;
 	struct rsp_stats rsp;
 	tpAniSirGlobal mac = cds_get_context(QDF_MODULE_ID_PE);
 
@@ -10366,6 +10262,21 @@ int wma_get_arp_stats_handler(void *handle, uint8_t *data,
 	rsp.connect_status = data_event->connect_status;
 	rsp.ba_session_establishment_status =
 		data_event->ba_session_establishment_status;
+
+	buf_ptr = (uint8_t *)data_event;
+	buf_ptr = buf_ptr + sizeof(wmi_vdev_get_arp_stats_event_fixed_param) +
+		  WMI_TLV_HDR_SIZE;
+	connect_stats_event = (wmi_vdev_get_connectivity_check_stats *)buf_ptr;
+
+	if (((connect_stats_event->tlv_header & WMI_TLV_HEADER_MASK) >> 16 ==
+	      WMITLV_TAG_STRUC_wmi_vdev_get_connectivity_check_stats)) {
+		rsp.connect_stats_present = true;
+		rsp.tcp_ack_recvd = connect_stats_event->tcp_ack_recvd;
+		rsp.icmpv4_rsp_recvd = connect_stats_event->icmpv4_rsp_recvd;
+		WMA_LOGD("tcp_ack_recvd %d icmpv4_rsp_recvd %d",
+			connect_stats_event->tcp_ack_recvd,
+			connect_stats_event->icmpv4_rsp_recvd);
+	}
 
 	mac->sme.get_arp_stats_cb(mac->hHdd, &rsp);
 
@@ -10411,7 +10322,8 @@ int wma_unified_power_debug_stats_event_handler(void *handle,
 
 	if (param_buf->num_debug_register > ((WMI_SVC_MSG_MAX_SIZE -
 		sizeof(wmi_pdev_chip_power_stats_event_fixed_param)) /
-		sizeof(uint32_t))) {
+		sizeof(uint32_t)) ||
+	    param_buf->num_debug_register > param_tlvs->num_debug_registers) {
 		WMA_LOGE("excess payload: LEN num_debug_register:%u",
 				param_buf->num_debug_register);
 		return -EINVAL;
@@ -10810,6 +10722,12 @@ int wma_rx_aggr_failure_event_handler(void *handle, u_int8_t *event_buf,
 	}
 
 	rx_aggr_hole_event->hole_cnt = rx_aggr_failure_info->num_failure_info;
+	if (rx_aggr_hole_event->hole_cnt > param_buf->num_failure_info) {
+		WMA_LOGE("Invalid no of hole count: %d",
+				rx_aggr_hole_event->hole_cnt);
+		qdf_mem_free(rx_aggr_hole_event);
+		return -EINVAL;
+	}
 	WMA_LOGD("aggr holes_sum: %d\n",
 		 rx_aggr_failure_info->num_failure_info);
 	for (i = 0; i < rx_aggr_hole_event->hole_cnt; i++) {
