@@ -44,8 +44,10 @@ struct gf_dev {
 	struct input_dev *input;
 
 	struct notifier_block notifier;
-	struct work_struct fb_state_work;
-	int fb_state;
+	struct workqueue_struct *event_workqueue;
+	struct work_struct event_work;
+	struct wake_lock fp_wakelock;
+	int event;
 
 	signed irq_gpio;
 	signed reset_gpio;
@@ -53,7 +55,7 @@ struct gf_dev {
 	unsigned users;
 	int irq;
 
-	struct wake_lock fp_wakelock;
+	struct task_struct *process;
 };
 
 void sendnlmsg(char *message);

@@ -119,12 +119,11 @@ static long gf_compat_ioctl(struct file *filp, unsigned int cmd, unsigned long a
 static irqreturn_t gf_irq(int irq, void *handle)
 {
 	struct gf_dev *gf_dev = handle;
-	char temp[4] = { 0x0 };
 
 	wake_lock_timeout(&gf_dev->fp_wakelock, msecs_to_jiffies(WAKELOCK_HOLD_TIME));
 
-	temp[0] = GF_NET_EVENT_IRQ;
-	sendnlmsg(temp);
+	gf_dev->event = GF_NET_EVENT_IRQ;
+	queue_work(gf_dev->event_workqueue, &gf_dev->event_work);
 
 	return IRQ_HANDLED;
 }
@@ -133,6 +132,8 @@ static int gf_open(struct inode *inode, struct file *filp)
 {
 	struct gf_dev *gf_dev = &gf;
 	int rc;
+
+	gf_dev->process = current;
 
 	/*
 	 * If this is the first user, turn on irqs and reset the hardware.
@@ -209,12 +210,35 @@ static const struct file_operations gf_fops = {
 	.release = gf_release,
 };
 
-static void gf_fb_state_worker(struct work_struct *work)
+static void gf_set_process_nice(struct gf_dev *gf_dev, int nice) {
+	if (!gf_dev->process)
+		return;
+
+	pr_debug("%s: setting nice to %d\n", __func__, nice);
+	set_user_nice(gf_dev->process, nice);
+}
+
+static void gf_event_worker(struct work_struct *work)
 {
-	struct gf_dev *gf_dev = container_of(work, typeof(*gf_dev), fb_state_work);
+	struct gf_dev *gf_dev = container_of(work, typeof(*gf_dev), event_work);
 	char temp[4] = {0x0};
 
-	temp[0] = gf_dev->fb_state;
+	switch (gf_dev->event) {
+	/*
+	 * Elevate the fingerprint process priority when screen is off to ensure
+	 * the fingerprint sensor is responsive and that the haptic
+	 * response on successful verification always fires.
+	 */
+	case GF_NET_EVENT_FB_BLACK:
+		gf_set_process_nice(gf_dev, -1);
+		break;
+	case GF_NET_EVENT_FB_UNBLACK:
+		gf_set_process_nice(gf_dev, 0);
+		break;
+	}
+
+	temp[0] = gf_dev->event;
+
 	sendnlmsg(temp);
 }
 
@@ -238,16 +262,16 @@ static int gf_fb_state_callback(struct notifier_block *nb,
 	blank = *(int *)(evdata->data);
 	switch (blank) {
 	case FB_BLANK_POWERDOWN:
-		gf_dev->fb_state = GF_NET_EVENT_FB_BLACK;
+		gf_dev->event = GF_NET_EVENT_FB_BLACK;
 		break;
 	case FB_BLANK_UNBLANK:
-		gf_dev->fb_state = GF_NET_EVENT_FB_UNBLACK;
+		gf_dev->event = GF_NET_EVENT_FB_UNBLACK;
 		break;
 	default:
 		goto end;
 	}
 
-	schedule_work(&gf_dev->fb_state_work);
+	queue_work(gf_dev->event_workqueue, &gf_dev->event_work);
 
 end:
 	return NOTIFY_OK;
@@ -263,6 +287,8 @@ static int gf_probe(struct platform_device *pdev)
 	struct device *dev;
 	int major;
 	int rc = 0;
+
+	gf_dev->process = NULL;
 
 	gf_dev->reset_gpio = of_get_named_gpio(pdev->dev.of_node,
 			"fp-gpio-reset", 0);
@@ -324,7 +350,9 @@ static int gf_probe(struct platform_device *pdev)
 
 	gf_dev->notifier = gf_fb_notifier;
 	fb_register_client(&gf_dev->notifier);
-	INIT_WORK(&gf_dev->fb_state_work, gf_fb_state_worker);
+	gf_dev->event_workqueue = alloc_workqueue("gf-event-wq",
+			WQ_MEM_RECLAIM | WQ_HIGHPRI, 0);
+	INIT_WORK(&gf_dev->event_work, gf_event_worker);
 
 	wake_lock_init(&gf_dev->fp_wakelock, WAKE_LOCK_SUSPEND, "fp_wakelock");
 
@@ -352,6 +380,8 @@ static int gf_remove(struct platform_device *pdev)
 	netlink_exit();
 
 	wake_lock_destroy(&gf_dev->fp_wakelock);
+
+	destroy_workqueue(gf_dev->event_workqueue);
 
 	fb_unregister_client(&gf_dev->notifier);
 
