@@ -113,3 +113,7 @@ all.config
 
 # Kdevelop4
 *.kdev4
+
+# Standalone stuffs
+/out
+build.sh
