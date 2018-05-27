@@ -1,5 +1,5 @@
 #include <linux/module.h>
-#include <linux/kernel.h>    
+#include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/input.h>
 #include <linux/delay.h>
@@ -187,11 +187,7 @@ static void s2s_input_event(struct input_handle *handle, unsigned int type,
 }
 
 static int input_dev_filter(struct input_dev *dev) {
-#ifdef CONFIG_MACH_CHIRON
 	if (strstr(dev->name, "synaptics_dsx")) {
-#else
-	if (strstr(dev->name, "synaptics,s3320")) {
-#endif
 		return 0;
 	} else {
 		return 1;
