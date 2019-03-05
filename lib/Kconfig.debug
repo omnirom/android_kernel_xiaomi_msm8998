@@ -588,6 +588,14 @@ config DEBUG_VM_RB
 
 	  If unsure, say N.
 
+config DEBUG_VM_PGFLAGS
+	bool "Debug page-flags operations"
+	depends on DEBUG_VM
+	help
+	  Enables extra validation on page flags operations.
+
+	  If unsure, say N.
+
 config DEBUG_VIRTUAL
 	bool "Debug VM translations"
 	depends on DEBUG_KERNEL && X86
@@ -1992,6 +2000,13 @@ config TEST_STATIC_KEYS
 	  Test the static key interfaces.
 
 	  If unsure, say N.
+
+config PANIC_ON_DATA_CORRUPTION
+	bool "Cause a Kernel Panic When Data Corruption is detected"
+	help
+	 Select this option to upgrade warnings for potentially
+	 recoverable data corruption scenarios to system-halting panics,
+	 for easier detection and debug.
 
 config BUG_ON_DATA_CORRUPTION
 	bool "Trigger a BUG when data corruption is detected"
